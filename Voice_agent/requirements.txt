@@ -1,0 +1,22 @@
+# AI Call Center - Python Dependencies
+
+# LLM
+google-generativeai>=0.3.0
+
+# Speech-to-Text (Local)
+openai-whisper>=20231117
+
+# Text-to-Speech (Local)
+TTS>=0.22.0
+
+# Audio Processing
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.24.0
+
+# Deep Learning
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Utilities
+python-dotenv>=1.0.0
