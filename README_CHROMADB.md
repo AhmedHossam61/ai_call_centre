@@ -1,4 +1,3 @@
-# ai_call_centre
 # Arabic RAG Call Center Agent with ChromaDB
 
 A production-ready RAG agent with **vector database persistence** and **incremental updates**. Only encodes new Q&A pairs, never re-encodes existing data.
