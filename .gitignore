@@ -2,11 +2,12 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+chroma_db/
 # C extensions
 *.so
 
 # Distribution / packaging
+chroma_db/
 .Python
 build/
 develop-eggs/
