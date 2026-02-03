@@ -1,13 +1,13 @@
 """
-AI Call Center with Enhanced STT
-Drop-in replacement for main.py with improved transcription accuracy
+AI Call Center with Enhanced STT and Optimized Audio
+- Auto-stops recording when you finish speaking (VAD)
+- Faster, more natural TTS output
 """
 
 import google.generativeai as genai
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
-from TTS.api import TTS
 import torch
 import os
 from dotenv import load_dotenv
@@ -17,18 +17,29 @@ from session import CallSession
 from dialect_detector import DialectDetector
 from response_generator import ResponseGenerator
 from enhanced_stt import EnhancedSTT
-import torch
+from vad_recorder import VADRecorder, SimpleRecorder
+from optimized_tts import OptimizedTTS
 from torch.serialization import add_safe_globals
 from TTS.tts.configs.xtts_config import XttsConfig
 
 add_safe_globals([XttsConfig])
+
 # Load environment variables
 load_dotenv()
 
 # Configuration
 SAMPLE_RATE = 16000
-RECORDING_DURATION = 5
-WHISPER_MODEL_SIZE = "medium"  # Use medium for better accuracy (was "base")
+WHISPER_MODEL_SIZE = "medium"  # medium for better accuracy
+
+# Recording settings
+USE_VAD = True  # Auto-stop when you finish speaking (recommended)
+MAX_RECORDING_DURATION = 30  # Maximum seconds if using VAD
+SIMPLE_RECORDING_DURATION = 10  # Fixed duration if not using VAD
+SILENCE_DURATION = 1.5  # Seconds of silence before auto-stop
+
+# TTS settings
+TTS_SPEED = 1.2  # 1.0=normal, 1.2=faster and more natural
+TTS_TEMPERATURE = 0.7  # 0.5=neutral, 0.7=natural, 0.9=very expressive
 
 
 class CallCenterAgent:
@@ -37,7 +48,7 @@ class CallCenterAgent:
     def __init__(self):
         """Initialize all components"""
         print("=" * 60)
-        print("AI Call Center with Enhanced STT - Initializing...")
+        print("AI Call Center - Enhanced Audio - Initializing...")
         print("=" * 60)
         
         # Initialize Gemini
@@ -49,19 +60,28 @@ class CallCenterAgent:
         self.gemini_model = genai.GenerativeModel('gemini-2.5-flash')
         print("✓ Gemini 2.5 Flash initialized")
         
-        # Initialize Enhanced STT (replaces basic Whisper)
+        # Initialize Enhanced STT
         print(f"Loading Enhanced STT...")
         self.stt = EnhancedSTT(model_size=WHISPER_MODEL_SIZE, enable_noise_reduction=True)
         print(f"✓ Enhanced STT loaded ({WHISPER_MODEL_SIZE} model)")
-        print(f"  - Noise reduction: enabled")
-        print(f"  - Audio normalization: enabled")
-        print(f"  - Optimized parameters: enabled")
         
-        # Initialize TTS
-        print("Loading TTS (XTTS-v2)...")
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-        print(f"✓ TTS loaded on {device}")
+        # Initialize Audio Recorder with VAD
+        if USE_VAD:
+            self.recorder = VADRecorder(aggressiveness=2)
+            print("✓ Voice Activity Detection (VAD) enabled")
+            print("  - Auto-stops when you finish speaking")
+            print(f"  - Max duration: {MAX_RECORDING_DURATION}s")
+            print(f"  - Silence threshold: {SILENCE_DURATION}s")
+        else:
+            self.recorder = SimpleRecorder()
+            print(f"✓ Simple recorder (fixed {SIMPLE_RECORDING_DURATION}s duration)")
+        
+        # Initialize Optimized TTS
+        print("Loading Optimized TTS...")
+        self.tts = OptimizedTTS(use_gpu=True)
+        print(f"✓ Optimized TTS loaded")
+        print(f"  - Speed: {TTS_SPEED}x (faster = more natural)")
+        print(f"  - Temperature: {TTS_TEMPERATURE} (natural expressiveness)")
         
         # Initialize dialect detector and response generator
         self.dialect_detector = DialectDetector(self.gemini_model)
@@ -69,21 +89,22 @@ class CallCenterAgent:
         print("✓ Dialect detector & response generator ready")
         
         print("\n" + "=" * 60)
-        print("All systems ready with Enhanced STT!")
+        print("All systems ready!")
         print("=" * 60 + "\n")
     
-    def record_audio(self, duration=RECORDING_DURATION):
-        """Record audio from microphone"""
-        print(f"🎤 Listening for {duration} seconds...")
-        audio = sd.rec(
-            int(duration * SAMPLE_RATE),
-            samplerate=SAMPLE_RATE,
-            channels=1,
-            dtype='float32'
-        )
-        sd.wait()
-        print("✓ Recording complete")
-        return audio.flatten()
+    def record_audio(self):
+        """Record audio from microphone (with VAD or fixed duration)"""
+        if USE_VAD:
+            # Use VAD - auto-stops when you finish speaking
+            audio = self.recorder.record_with_vad(
+                max_duration=MAX_RECORDING_DURATION,
+                silence_duration=SILENCE_DURATION
+            )
+        else:
+            # Use fixed duration
+            audio = self.recorder.record(duration=SIMPLE_RECORDING_DURATION)
+        
+        return audio
     
     def transcribe_audio(self, audio_data):
         """
@@ -95,31 +116,25 @@ class CallCenterAgent:
         return text
     
     def synthesize_speech(self, text, reference_audio_path=None):
-        """Convert text to speech"""
+        """Convert text to speech with optimized settings"""
         print("🔊 Generating speech...")
         
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
-            output_path = f.name
-        
         try:
-            if reference_audio_path and os.path.exists(reference_audio_path):
-                self.tts.tts_to_file(
-                    text=text,
-                    speaker_wav=reference_audio_path,
-                    language="ar",
-                    file_path=output_path
-                )
-            else:
-                self.tts.tts_to_file(
-                    text=text,
-                    language="ar",
-                    file_path=output_path
-                )
+            # Use optimized TTS with natural speed and expressiveness
+            output_path = self.tts.synthesize(
+                text=text,
+                reference_voice=reference_audio_path,
+                speed=TTS_SPEED,  # Faster = more natural
+                temperature=TTS_TEMPERATURE  # Natural expressiveness
+            )
             
             return output_path
             
         except Exception as e:
             print(f"❌ TTS error: {e}")
+            # Create silent audio as fallback
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                output_path = f.name
             silence = np.zeros(SAMPLE_RATE * 2, dtype=np.float32)
             sf.write(output_path, silence, SAMPLE_RATE)
             return output_path
