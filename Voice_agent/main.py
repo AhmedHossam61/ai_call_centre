@@ -17,7 +17,11 @@ import uuid
 from session import CallSession
 from dialect_detector import DialectDetector
 from response_generator import ResponseGenerator
+import torch
+from torch.serialization import add_safe_globals
+from TTS.tts.configs.xtts_config import XttsConfig
 
+add_safe_globals([XttsConfig])
 # Load environment variables
 load_dotenv()
 

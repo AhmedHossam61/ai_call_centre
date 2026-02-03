@@ -8,6 +8,7 @@ openai-whisper>=20231117
 
 # Text-to-Speech (Local)
 TTS>=0.22.0
+transformers==4.56.2
 
 # Audio Processing
 sounddevice>=0.4.6
